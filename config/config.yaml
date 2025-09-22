@@ -1,0 +1,79 @@
+# PHI Redaction Configuration File
+# Edit this file to customize redaction behavior
+
+# Entity types to detect and redact
+enabled_entities:
+  - PERSON
+  - EMAIL_ADDRESS
+  - PHONE_NUMBER
+  - US_SSN
+  - DATE_TIME
+  - LOCATION
+  - MEDICAL_LICENSE
+  - NRP
+  - CREDIT_CARD
+  - IP_ADDRESS
+  - URL
+
+# Anonymization strategy: 'replace' or 'hash'
+# - replace: Replace with generic tokens like <PERSON>
+# - hash: Replace with hashed identifiers for linkability
+anonymization_strategy: replace
+
+# Column headers that indicate PHI content
+# These columns will be fully redacted
+column_redaction_hints:
+  - name
+  - patient
+  - firstname
+  - lastname
+  - middlename
+  - dob
+  - dateofbirth
+  - birthdate
+  - birth
+  - address
+  - street
+  - city
+  - state
+  - zip
+  - zipcode
+  - postal
+  - phone
+  - telephone
+  - mobile
+  - cell
+  - fax
+  - email
+  - mail
+  - ssn
+  - social
+  - socialsecurity
+  - mrn
+  - medicalrecord
+  - recordnumber
+  - patientid
+  - insurance
+  - policy
+  - member
+  - group
+  - subscriber
+
+# Suffix to append to output filenames
+output_suffix: _redacted
+
+# SpaCy model to use (en_core_web_md or en_core_web_lg)
+spacy_model: en_core_web_md
+
+# Minimum confidence score for detection (0.0 to 1.0)
+# Lower values catch more PHI but may have false positives
+confidence_threshold: 0.35
+
+# Custom recognizers for site-specific patterns
+custom_recognizers:
+  enabled: true
+  # Medical Record Number pattern (example: AB123456)
+  # Adjust this pattern to match your organization's MRN format
+  mrn_pattern: '\b[A-Z]{2}\d{6}\b'
+  # Add more patterns as needed:
+  # custom_id_pattern: '\bID-\d{8}\b'
