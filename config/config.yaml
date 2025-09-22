@@ -67,7 +67,7 @@ spacy_model: en_core_web_md
 
 # Minimum confidence score for detection (0.0 to 1.0)
 # Lower values catch more PHI but may have false positives
-confidence_threshold: 0.35
+confidence_threshold: 0.20
 
 # Custom recognizers for site-specific patterns
 custom_recognizers:
@@ -77,3 +77,5 @@ custom_recognizers:
   mrn_pattern: '\b[A-Z]{2}\d{6}\b'
   # Add more patterns as needed:
   # custom_id_pattern: '\bID-\d{8}\b'
+  # DOB label pattern (catches "DOB" text in cells)
+  dob_label_pattern: '\b(DOB|D\.O\.B\.?)\b'

@@ -114,7 +114,8 @@ class EnhancedRedactionGUI:
                     self.strategy_var.set(config.get('anonymization_strategy', 'replace'))
 
                     # Load confidence threshold
-                    self.confidence_var.set(config.get('confidence_threshold', 0.5))
+                    # Set to 0.20 by default for better name detection
+                    self.confidence_var.set(config.get('confidence_threshold', 0.20))
 
                     # Load custom pattern if exists
                     custom_config = config.get('custom_recognizers', {})

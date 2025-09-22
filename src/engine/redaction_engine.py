@@ -83,7 +83,7 @@ class RedactionEngine:
             'column_redaction_hints': self.PHI_COLUMN_INDICATORS,
             'output_suffix': '_redacted',
             'spacy_model': 'en_core_web_md',
-            'confidence_threshold': 0.5,
+            'confidence_threshold': 0.20,  # Lowered for better name detection
             'custom_recognizers': {
                 'enabled': True,
                 'mrn_pattern': r'\b[A-Z]{2}\d{6}\b'  # Example: AB123456
@@ -166,7 +166,7 @@ class RedactionEngine:
         if results:
             redacted = text_str
             for result in sorted(results, key=lambda x: x.start, reverse=True):
-                if result.score >= self.config.get('confidence_threshold', 0.5):
+                if result.score >= self.config.get('confidence_threshold', 0.20):
                     self.detection_log.append({
                         'sheet': sheet_name,
                         'row': row_idx,
