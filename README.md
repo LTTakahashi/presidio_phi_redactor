@@ -35,10 +35,10 @@ python src/gui/app.py
 ### Main Interface
 ![PHI Redaction Tool Main Screen](./.screenshots/2025-09-22%2009_22_11-PHI%20Redaction%20Tool%20(Ubuntu).png)
 
-### Processing Files
+### Entity Types: Options
 ![PHI Redaction Tool Processing](./.screenshots/2025-09-22%2009_23_14-PHI%20Redaction%20Tool%20(Ubuntu).png)
 
-### Results View
+### Strategy: Options
 ![PHI Redaction Tool Results](./.screenshots/2025-09-22%2009_23_34-PHI%20Redaction%20Tool%20(Ubuntu).png)
 
 ## What Gets Redacted
