@@ -140,6 +140,40 @@ class RedactionEngine:
 
         return False
 
+    def _merge_overlapping_entities(self, results):
+        """Merge overlapping entities to avoid partial redaction."""
+        if not results:
+            return results
+
+        # Sort by start position
+        sorted_results = sorted(results, key=lambda x: (x.start, -x.end))
+
+        merged = []
+        current = sorted_results[0]
+
+        for next_result in sorted_results[1:]:
+            # Check if entities overlap or are adjacent
+            if next_result.start <= current.end:
+                # Merge: extend the current entity to cover both
+                if next_result.end > current.end:
+                    # Create a new merged entity with the wider span
+                    from presidio_analyzer import RecognizerResult
+                    current = RecognizerResult(
+                        entity_type=current.entity_type,  # Keep the first entity type
+                        start=current.start,
+                        end=max(current.end, next_result.end),
+                        score=max(current.score, next_result.score)  # Keep higher score
+                    )
+            else:
+                # No overlap, save current and move to next
+                merged.append(current)
+                current = next_result
+
+        # Don't forget the last entity
+        merged.append(current)
+
+        return merged
+
     def _anonymize_text(self, text: str, entity_type: str = "GENERIC") -> str:
         """Anonymize text based on configured strategy."""
         strategy = self.config.get('anonymization_strategy', 'replace')
@@ -157,30 +191,38 @@ class RedactionEngine:
 
         text_str = str(text)
 
+        # Pass the confidence threshold directly to the analyze method
+        # This ensures Presidio filters results at the analysis stage
+        threshold = self.config.get('confidence_threshold', 0.20)
+
         results = self.analyzer.analyze(
             text=text_str,
             entities=self.config.get('enabled_entities', []),
-            language='en'
+            language='en',
+            score_threshold=threshold  # Pass threshold to Presidio
         )
 
         if results:
-            redacted = text_str
-            for result in sorted(results, key=lambda x: x.start, reverse=True):
-                if result.score >= self.config.get('confidence_threshold', 0.20):
-                    self.detection_log.append({
-                        'sheet': sheet_name,
-                        'row': row_idx,
-                        'column': col_idx,
-                        'entity_type': result.entity_type,
-                        'confidence': result.score,
-                        'original_length': result.end - result.start
-                    })
+            # Merge overlapping entities to avoid partial redaction
+            merged_results = self._merge_overlapping_entities(results)
 
-                    replacement = self._anonymize_text(
-                        text_str[result.start:result.end],
-                        result.entity_type
-                    )
-                    redacted = redacted[:result.start] + replacement + redacted[result.end:]
+            redacted = text_str
+            for result in sorted(merged_results, key=lambda x: x.start, reverse=True):
+                # No need to check threshold again since Presidio already filtered
+                self.detection_log.append({
+                    'sheet': sheet_name,
+                    'row': row_idx,
+                    'column': col_idx,
+                    'entity_type': result.entity_type,
+                    'confidence': result.score,
+                    'original_length': result.end - result.start
+                })
+
+                replacement = self._anonymize_text(
+                    text_str[result.start:result.end],
+                    result.entity_type
+                )
+                redacted = redacted[:result.start] + replacement + redacted[result.end:]
 
             return redacted
 
@@ -189,6 +231,7 @@ class RedactionEngine:
     def redact_workbook(self, input_path: str, output_path: Optional[str] = None) -> tuple:
         """
         Redact PHI from Excel workbook.
+        If a redacted file already exists, it will be replaced.
         Returns: (output_path, detection_report_path)
         """
         logging.info(f"Starting redaction for: {input_path}")
@@ -199,13 +242,46 @@ class RedactionEngine:
             suffix = self.config.get('output_suffix', '_redacted')
             output_path = f"{base_name}{suffix}.xlsx"
 
+        # Check if redacted file already exists
+        if os.path.exists(output_path):
+            logging.info(f"Existing redacted file found at {output_path}. It will be replaced.")
+            # Create backup of existing file (optional, for safety)
+            backup_path = f"{output_path}.backup"
+            try:
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                os.rename(output_path, backup_path)
+                logging.info(f"Created backup of existing file at {backup_path}")
+            except Exception as e:
+                logging.warning(f"Could not create backup: {e}")
+
         workbook = openpyxl.load_workbook(input_path)
 
         for sheet_name in workbook.sheetnames:
             sheet = workbook[sheet_name]
             self._redact_sheet(sheet, sheet_name)
 
-        workbook.save(output_path)
+        # Save the new redacted file
+        try:
+            workbook.save(output_path)
+            # If save successful, remove backup
+            backup_path = f"{output_path}.backup"
+            if os.path.exists(backup_path):
+                try:
+                    os.remove(backup_path)
+                    logging.info("Removed backup file after successful save")
+                except:
+                    pass  # Ignore errors removing backup
+        except Exception as e:
+            # If save fails, restore backup
+            backup_path = f"{output_path}.backup"
+            if os.path.exists(backup_path):
+                try:
+                    os.rename(backup_path, output_path)
+                    logging.error(f"Save failed, restored backup. Error: {e}")
+                except:
+                    pass
+            raise e
 
         report_path = self._save_detection_report(input_path, output_path)
 
@@ -253,28 +329,61 @@ class RedactionEngine:
                             cell.value = redacted
 
     def _save_detection_report(self, input_path: str, output_path: str) -> str:
-        """Save detection report as CSV."""
+        """Save detection report as CSV. Replaces existing report if present."""
         report_path = output_path.replace('.xlsx', '_report.csv')
 
-        with open(report_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                'Timestamp', 'Input_File', 'Output_File', 'Sheet',
-                'Row', 'Column', 'Entity_Type', 'Confidence'
-            ])
+        # Check if report already exists
+        if os.path.exists(report_path):
+            logging.info(f"Existing report found at {report_path}. It will be replaced.")
+            try:
+                # Create backup of existing report
+                backup_path = f"{report_path}.backup"
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                os.rename(report_path, backup_path)
+            except Exception as e:
+                logging.warning(f"Could not backup existing report: {e}")
 
-            timestamp = datetime.now().isoformat()
-            for detection in self.detection_log:
+        try:
+            with open(report_path, 'w', newline='') as f:
+                writer = csv.writer(f)
                 writer.writerow([
-                    timestamp,
-                    os.path.basename(input_path),
-                    os.path.basename(output_path),
-                    detection['sheet'],
-                    detection['row'],
-                    detection['column'],
-                    detection['entity_type'],
-                    f"{detection['confidence']:.2f}"
+                    'Timestamp', 'Input_File', 'Output_File', 'Sheet',
+                    'Row', 'Column', 'Entity_Type', 'Confidence'
                 ])
+
+                timestamp = datetime.now().isoformat()
+                for detection in self.detection_log:
+                    writer.writerow([
+                        timestamp,
+                        os.path.basename(input_path),
+                        os.path.basename(output_path),
+                        detection['sheet'],
+                        detection['row'],
+                        detection['column'],
+                        detection['entity_type'],
+                        f"{detection['confidence']:.2f}"
+                    ])
+
+            # If save successful, remove backup
+            backup_path = f"{report_path}.backup"
+            if os.path.exists(backup_path):
+                try:
+                    os.remove(backup_path)
+                    logging.info("Removed report backup after successful save")
+                except:
+                    pass  # Ignore errors removing backup
+
+        except Exception as e:
+            # If save fails, restore backup
+            backup_path = f"{report_path}.backup"
+            if os.path.exists(backup_path):
+                try:
+                    os.rename(backup_path, report_path)
+                    logging.error(f"Report save failed, restored backup. Error: {e}")
+                except:
+                    pass
+            raise e
 
         return report_path
 

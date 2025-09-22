@@ -672,6 +672,39 @@ class EnhancedRedactionGUI:
             )
             return
 
+        # Check for existing redacted files
+        existing_redacted = []
+        for input_file in self.input_files:
+            if self.output_folder:
+                base_name = os.path.basename(input_file)
+                name_parts = os.path.splitext(base_name)
+                output_name = f"{name_parts[0]}_redacted{name_parts[1]}"
+                output_path = os.path.join(self.output_folder, output_name)
+            else:
+                base_name = os.path.splitext(input_file)[0]
+                output_path = f"{base_name}_redacted.xlsx"
+
+            if os.path.exists(output_path):
+                existing_redacted.append(os.path.basename(output_path))
+
+        # If existing redacted files found, ask user for confirmation
+        if existing_redacted:
+            if len(existing_redacted) == 1:
+                message = f"The redacted file '{existing_redacted[0]}' already exists.\nDo you want to replace it?"
+            else:
+                message = f"The following redacted files already exist:\n{', '.join(existing_redacted[:3])}"
+                if len(existing_redacted) > 3:
+                    message += f" and {len(existing_redacted) - 3} more..."
+                message += "\n\nDo you want to replace them?"
+
+            result = messagebox.askyesno(
+                "Replace Existing Files",
+                message,
+                icon='warning'
+            )
+            if not result:
+                return
+
         # Start processing in background thread
         self.processing = True
         self.redact_button.config(state=tk.DISABLED)

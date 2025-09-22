@@ -21,6 +21,10 @@ def get_custom_recognizers(config: Dict[str, Any]) -> List[PatternRecognizer]:
     if not custom_config.get('enabled', False):
         return recognizers
 
+    # Set fixed confidence scores for pattern matches
+    # These represent how confident we are when the pattern matches
+    # The threshold will determine if these scores are high enough to trigger redaction
+
     # Medical Record Number (MRN) Recognizer
     # Example pattern: AB123456 (2 letters followed by 6 digits)
     # Adjust this pattern to match your organization's MRN format
@@ -34,7 +38,7 @@ def get_custom_recognizers(config: Dict[str, Any]) -> List[PatternRecognizer]:
                 Pattern(
                     name="MRN_pattern",
                     regex=mrn_pattern,
-                    score=0.8  # High confidence for exact pattern match
+                    score=0.8  # Fixed high confidence for exact pattern match
                 )
             ],
             context=[  # Optional: words that increase confidence when nearby
@@ -44,38 +48,72 @@ def get_custom_recognizers(config: Dict[str, Any]) -> List[PatternRecognizer]:
         )
         recognizers.append(mrn_recognizer)
 
+    # Common Names Recognizer
+    # This catches common first names that SpaCy's NER might miss
+    common_first_names = [
+        "Robert", "Ricardo", "Richard", "Michael", "John", "David", "James", "William",
+        "Mary", "Patricia", "Jennifer", "Linda", "Elizabeth", "Barbara", "Susan",
+        "Joseph", "Thomas", "Christopher", "Daniel", "Matthew", "Anthony", "Donald",
+        "Mark", "Paul", "Steven", "Kenneth", "Andrew", "Joshua", "Kevin", "Brian",
+        "George", "Edward", "Ronald", "Timothy", "Jason", "Jeffrey", "Ryan", "Jacob",
+        "Gary", "Nicholas", "Eric", "Jonathan", "Stephen", "Larry", "Justin", "Scott",
+        "Brandon", "Benjamin", "Samuel", "Frank", "Gregory", "Raymond", "Alexander",
+        "Carlos", "Jose", "Luis", "Juan", "Miguel", "Pedro", "Antonio", "Francisco",
+        "Maria", "Ana", "Carmen", "Rosa", "Isabel", "Elena", "Teresa", "Patricia",
+        "Ahmed", "Mohammed", "Ali", "Hassan", "Ibrahim", "Fatima", "Aisha", "Omar"
+    ]
+
+    # Create patterns for each name (case-insensitive)
+    name_patterns = []
+    for name in common_first_names:
+        name_patterns.append(
+            Pattern(
+                name=f"{name.lower()}_pattern",
+                regex=rf'(?i)\b{name}\b',  # (?i) makes it case-insensitive
+                score=0.65  # Moderate confidence for common name match
+            )
+        )
+
+    common_names_recognizer = PatternRecognizer(
+        supported_entity="PERSON",
+        name="common_names_recognizer",
+        patterns=name_patterns,
+        context=["patient", "name", "client", "person", "individual", "mr", "ms", "mrs", "dr"]
+    )
+    recognizers.append(common_names_recognizer)
+
     # Enhanced Phone Number Recognizer
-    # Improves detection of various phone formats with higher confidence
+    # Improves detection of various phone formats
     phone_patterns = [
         # (XXX) XXX-XXXX or (XXX)XXX-XXXX
         Pattern(
             name="phone_with_parentheses",
             regex=r'\(\d{3}\)\s?\d{3}[\-\.\s]?\d{4}',
-            score=0.8  # High confidence for this format
+            score=0.75  # High confidence for this standard format
         ),
         # XXX-XXX-XXXX or XXX.XXX.XXXX or XXX XXX XXXX
         Pattern(
             name="phone_with_separators",
             regex=r'\b\d{3}[\-\.\s]\d{3}[\-\.\s]\d{4}\b',
-            score=0.8
+            score=0.75  # High confidence for standard formats
         ),
         # +1-XXX-XXX-XXXX or +1 (XXX) XXX-XXXX
         Pattern(
             name="phone_with_country",
             regex=r'\+1[\-\.\s]?\(?\d{3}\)?[\-\.\s]?\d{3}[\-\.\s]?\d{4}',
-            score=0.9
+            score=0.85  # Very high confidence with country code
         ),
         # XXX-XXXX (local format)
         Pattern(
             name="phone_local",
             regex=r'\b\d{3}[\-\.\s]\d{4}\b',
-            score=0.6
+            score=0.5  # Lower confidence for ambiguous local format
         ),
         # Common phone number indicators followed by number
         Pattern(
             name="phone_with_label",
             regex=r'(?:phone|tel|cell|mobile|fax|contact)[\s:\-]*[\(]?\d{3}[\)]?[\s\-\.]?\d{3}[\s\-\.]?\d{4}',
-            score=0.9
+            score=0.9  # Very high confidence when labeled
         )
     ]
 
