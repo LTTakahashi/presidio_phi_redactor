@@ -107,6 +107,23 @@ def get_custom_recognizers(config: Dict[str, Any]) -> List[PatternRecognizer]:
             )
         )
 
+    # Address Recognizer
+    # Catches street addresses (e.g., "123 Main St", "Suite 200")
+    # This addresses the "partial redaction" issue reported by Samina
+    address_pattern = Pattern(
+        name="address_pattern",
+        regex=r'(?i)\b\d+\s+[A-Z0-9\.]+(?:\s+[A-Z0-9\.]+){1,3}\s+(?:St|Ave|Blvd|Rd|Ln|Dr|Way|Ct|Plz|Pl|Terr|Suite|Ste|Apt|Unit|Box)\b\.?',
+        score=0.8
+    )
+
+    address_recognizer = PatternRecognizer(
+        supported_entity="LOCATION",
+        name="address_recognizer",
+        patterns=[address_pattern],
+        context=["address", "located at", "suite", "apt"]
+    )
+    recognizers.append(address_recognizer)
+
     common_names_recognizer = PatternRecognizer(
         supported_entity="PERSON",
         name="common_names_recognizer",
