@@ -47,6 +47,23 @@ def get_custom_recognizers(config: Dict[str, Any]) -> List[PatternRecognizer]:
             ]
         )
         recognizers.append(mrn_recognizer)
+    # Doctor Name Recognizer
+    # Catches "Dr. Name" or "Doctor Name" formats
+    # This is important for surnames that might not be in common name lists
+    doctor_pattern = Pattern(
+        name="doctor_pattern",
+        regex=r'(?i)\b(dr\.?|doctor)\s+([a-z]+(?:-[a-z]+)?)\b',
+        score=0.9  # Very high confidence for explicit title
+    )
+
+    doctor_recognizer = PatternRecognizer(
+        supported_entity="PERSON",
+        name="doctor_recognizer",
+        patterns=[doctor_pattern],
+        context=["physician", "surgeon", "md", "do", "provider"]
+    )
+    recognizers.append(doctor_recognizer)
+
 
     # Common Names Recognizer
     # This catches common first names that SpaCy's NER might miss

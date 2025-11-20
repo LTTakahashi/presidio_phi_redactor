@@ -184,31 +184,60 @@ class RedactionEngine:
         else:  # replace
             return f"<{entity_type}>"
 
-    def _analyze_cell(self, text: str, row_idx: int, col_idx: int, sheet_name: str) -> Optional[str]:
-        """Analyze and redact a single cell."""
+    def analyze_text(self, text: str) -> str:
+        """
+        Analyze and redact text string.
+        Applies all configured recognizers and filters.
+        """
         if not text or not str(text).strip():
             return text
 
         text_str = str(text)
-
-        # Pass the confidence threshold directly to the analyze method
-        # This ensures Presidio filters results at the analysis stage
         threshold = self.config.get('confidence_threshold', 0.20)
 
         results = self.analyzer.analyze(
             text=text_str,
             entities=self.config.get('enabled_entities', []),
             language='en',
-            score_threshold=threshold  # Pass threshold to Presidio
+            score_threshold=threshold
         )
 
         if results:
-            # Merge overlapping entities to avoid partial redaction
-            merged_results = self._merge_overlapping_entities(results)
+            # Filter out entities that look like JSON artifacts or code
+            valid_results = []
+            for result in results:
+                entity_text = text_str[result.start:result.end]
+                if any(char in entity_text for char in ['"', '{', '}', '[', ']', ':']):
+                    continue
+                valid_results.append(result)
+
+            # Merge overlapping entities
+            merged_results = self._merge_overlapping_entities(valid_results)
 
             redacted = text_str
             for result in sorted(merged_results, key=lambda x: x.start, reverse=True):
-                # No need to check threshold again since Presidio already filtered
+                # Log detection (optional, might need context if used outside cell loop)
+                # For now, we won't log here to avoid side effects when testing, 
+                # or we can log with dummy values if needed.
+                # But _analyze_cell handles logging. 
+                # Let's return the redacted text and the results so the caller can log.
+                
+                replacement = self._anonymize_text(
+                    text_str[result.start:result.end],
+                    result.entity_type
+                )
+                redacted = redacted[:result.start] + replacement + redacted[result.end:]
+            
+            return redacted, merged_results
+            
+        return text_str, []
+
+    def _analyze_cell(self, text: str, row_idx: int, col_idx: int, sheet_name: str) -> Optional[str]:
+        """Analyze and redact a single cell."""
+        redacted_text, results = self.analyze_text(text)
+        
+        if results:
+            for result in results:
                 self.detection_log.append({
                     'sheet': sheet_name,
                     'row': row_idx,
@@ -217,16 +246,8 @@ class RedactionEngine:
                     'confidence': result.score,
                     'original_length': result.end - result.start
                 })
-
-                replacement = self._anonymize_text(
-                    text_str[result.start:result.end],
-                    result.entity_type
-                )
-                redacted = redacted[:result.start] + replacement + redacted[result.end:]
-
-            return redacted
-
-        return text_str
+        
+        return redacted_text
 
     def redact_workbook(self, input_path: str, output_path: Optional[str] = None) -> tuple:
         """
