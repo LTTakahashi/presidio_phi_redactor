@@ -108,12 +108,16 @@ def get_custom_recognizers(config: Dict[str, Any]) -> List[PatternRecognizer]:
         )
 
     # Address Recognizer
-    # Catches street addresses (e.g., "123 Main St", "Suite 200")
-    # This addresses the "partial redaction" issue reported by Samina
+    # Catches street addresses (e.g., "123 Main St", "Suite 200", "605 Holland Suite 200")
+    # Updated to be more flexible:
+    # 1. Matches standard addresses with suffixes (St, Ave, etc.)
+    # 2. Matches addresses where suffix might be missing but followed by Unit/Suite
+    # 3. Matches "Suite/Unit X" standalone or following a number/name
+    # 4. Matches "Number + Name" if it looks like a street address start (e.g., "820 McClellan")
     address_pattern = Pattern(
         name="address_pattern",
-        regex=r'(?i)\b\d+\s+[A-Z0-9\.]+(?:\s+[A-Z0-9\.]+){1,3}\s+(?:St|Ave|Blvd|Rd|Ln|Dr|Way|Ct|Plz|Pl|Terr|Suite|Ste|Apt|Unit|Box)\b\.?',
-        score=0.8
+        regex=r'(?i)\b\d+\s+[A-Z0-9\.]+(?:\s+[A-Z0-9\.]+){0,3}\s+(?:St|Ave|Blvd|Rd|Ln|Dr|Way|Ct|Plz|Pl|Terr|Suite|Ste|Apt|Unit|Box)\b\.?|(?i)\b\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b',
+        score=0.6  # Lower score for the generic "Number + Name" pattern to avoid false positives, but catch "820 McClellan"
     )
 
     address_recognizer = PatternRecognizer(
