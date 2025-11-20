@@ -67,6 +67,22 @@ def get_custom_recognizers(config: Dict[str, Any]) -> List[PatternRecognizer]:
 
     # Common Names Recognizer
     # This catches common first names that SpaCy's NER might miss
+    # Business/Location Recognizer
+    # Catches specific business types mentioned in feedback
+    business_pattern = Pattern(
+        name="business_pattern",
+        regex=r'(?i)\b[A-Z][a-z\']+(?:\s+[A-Z][a-z\']+)*\s+(?:Hair\s+Salon|Salon|Barbershop|Fire\s+Department|Police\s+Department|Station\s+\d+|Hospital|Clinic|Pharmacy)\b',
+        score=0.85
+    )
+
+    business_recognizer = PatternRecognizer(
+        supported_entity="LOCATION",
+        name="business_recognizer",
+        patterns=[business_pattern],
+        context=["visit", "went to", "at", "location"]
+    )
+    recognizers.append(business_recognizer)
+
     common_first_names = [
         "Robert", "Ricardo", "Richard", "Michael", "John", "David", "James", "William",
         "Mary", "Patricia", "Jennifer", "Linda", "Elizabeth", "Barbara", "Susan",

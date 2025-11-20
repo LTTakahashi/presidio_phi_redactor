@@ -193,6 +193,10 @@ class RedactionEngine:
             return text
 
         text_str = str(text)
+        # Clean text artifacts (smart quotes, etc.)
+        # Replace â€™ (and other common mojibake) with standard apostrophe
+        text_str = text_str.replace('â€™', "'").replace('’', "'").replace('`', "'")
+
         threshold = self.config.get('confidence_threshold', 0.20)
 
         results = self.analyzer.analyze(
@@ -207,8 +211,25 @@ class RedactionEngine:
             valid_results = []
             for result in results:
                 entity_text = text_str[result.start:result.end]
+                
+                # 1. Check for JSON/code delimiters
                 if any(char in entity_text for char in ['"', '{', '}', '[', ']', ':']):
                     continue
+                    
+                # 2. Check for False Positive Dates/Times (Samina Feedback)
+                # Ignore "daily", "weekly", "recurring", "Sunday", "Tuesday" if detected as DATE_TIME
+                # or if they are just common words that shouldn't be redacted in this context
+                lower_text = entity_text.lower()
+                if result.entity_type == 'DATE_TIME':
+                    # List of words that are often falsely flagged as DATE_TIME in this context
+                    # but are structural/descriptive (e.g. "recurring daily")
+                    deny_list = ['daily', 'weekly', 'monthly', 'yearly', 'recurring', 
+                                 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+                    
+                    # Check if the entity is JUST one of these words (or starts with 'recurring')
+                    if lower_text in deny_list or lower_text.startswith('recurring'):
+                        continue
+                
                 valid_results.append(result)
 
             # Merge overlapping entities
