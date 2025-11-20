@@ -16,112 +16,29 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# Virtual Environment
+# Virtual Env
 venv/
-ENV/
 env/
-.venv/
-.ENV/
-.env/
-
-# PyCharm
-.idea/
-
-# VSCode
-.vscode/
-*.code-workspace
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# PEP 582
-__pypackages__/
-
-# Environments
+ENV/
 .env
 .venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
+# IDE
+.idea/
+.vscode/
 *.swp
 *.swo
-*~
 
-# Logs
+# Test artifacts
 *.log
-logs/
-*.log.*
-
-# Testing
-.coverage
-.pytest_cache/
-htmlcov/
-.tox/
-.nox/
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-
-# Data files (for privacy)
-*.xlsx
-*.xls
-*.csv
-!tests/sample_data/*.xlsx
-!tests/sample_data/*.xls
-!tests/sample_data/*.csv
-
-# Output files
+test_output/
 *_redacted.xlsx
-*_redacted_report.csv
-output/
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.bak
-
-# Documentation build
-docs/_build/
-docs/.doctrees/
-
-# Secrets and configs (except the default config)
-*.secret
-*.key
-*.pem
-secrets/
-!config/config.yaml
+*_redacted.csv
+*_report.csv
+synthetic_phi_tasks.xlsx
+test_data.xlsx
