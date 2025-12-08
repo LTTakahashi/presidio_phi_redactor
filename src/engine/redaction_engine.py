@@ -193,9 +193,37 @@ class RedactionEngine:
             return text
 
         text_str = str(text)
-        # Clean text artifacts (smart quotes, etc.)
-        # Replace â€™ (and other common mojibake) with standard apostrophe
-        text_str = text_str.replace('â€™', "'").replace('’', "'").replace('`', "'")
+        
+        # Comprehensive text normalization for encoding artifacts (mojibake)
+        # These patterns occur when UTF-8 encoded text is read as Windows-1252/Latin-1
+        # Common mojibake patterns and their correct replacements:
+        mojibake_replacements = {
+            # Smart quotes (curly quotes)
+            'â€œ': '"',      # Left double quote "
+            'â€': '"',       # Right double quote "
+            'â€˜': "'",      # Left single quote '
+            'â€™': "'",      # Right single quote ' (apostrophe)
+            # Ellipsis
+            'â€¦': '...',    # Horizontal ellipsis …
+            # Dashes
+            'â€"': '-',      # En dash –
+            'â€"': '--',     # Em dash —
+            # Other common artifacts
+            'Â ': ' ',       # Non-breaking space artifact
+            'Â': '',         # Stray  artifact
+            # Unicode quote characters (not mojibake, but normalize for consistency)
+            '’': "'",        # Right single quote
+            '‘': "'",        # Left single quote
+            '“': '"',        # Left double quote
+            '”': '"',        # Right double quote
+            '`': "'",        # Backtick to apostrophe
+            '…': '...',      # Ellipsis to three dots
+            '–': '-',        # En dash to hyphen
+            '—': '--',       # Em dash to double hyphen
+        }
+        
+        for artifact, replacement in mojibake_replacements.items():
+            text_str = text_str.replace(artifact, replacement)
 
         threshold = self.config.get('confidence_threshold', 0.20)
 
