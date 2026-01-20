@@ -8,6 +8,7 @@ import os
 import sys
 import threading
 import traceback
+import glob
 
 # Check for critical dependencies before proceeding
 try:
@@ -201,9 +202,17 @@ class EnhancedRedactionGUI:
             file_frame,
             text="Select Files...",
             command=self.select_files,
-            width=15
+            width=12
         )
         select_button.grid(row=1, column=1, padx=(0, 5))
+
+        select_folder_button = ttk.Button(
+            file_frame,
+            text="Select Folder...",
+            command=self.select_folder,
+            width=12
+        )
+        select_folder_button.grid(row=1, column=2, padx=(0, 5))
 
         clear_button = ttk.Button(
             file_frame,
@@ -211,7 +220,7 @@ class EnhancedRedactionGUI:
             command=self.clear_files,
             width=8
         )
-        clear_button.grid(row=1, column=2)
+        clear_button.grid(row=1, column=3)
 
         # Output folder
         ttk.Label(file_frame, text="Output Folder:", font=('Arial', 9, 'bold')).grid(
@@ -607,6 +616,40 @@ class EnhancedRedactionGUI:
         self.status_label.config(text="Ready")
         self.results_frame.grid_forget()
 
+    def select_folder(self):
+        """Handle folder selection for batch processing."""
+        folder = filedialog.askdirectory(
+            title="Select Folder Containing Excel Files"
+        )
+
+        if folder:
+            # Find all Excel files in the folder
+            xlsx_files = glob.glob(os.path.join(folder, "*.xlsx"))
+            xls_files = glob.glob(os.path.join(folder, "*.xls"))
+            
+            # Combine and filter out already-redacted files
+            all_files = []
+            for f in xlsx_files + xls_files:
+                basename = os.path.basename(f).lower()
+                # Skip already-redacted files
+                if '_redacted' not in basename:
+                    all_files.append(f)
+            
+            if all_files:
+                self.input_files = sorted(all_files)
+                self.update_file_display()
+                self.redact_button.config(state=tk.NORMAL)
+                self.status_label.config(
+                    text=f"{len(self.input_files)} Excel file(s) found in folder. Ready to redact."
+                )
+                # Hide results if switching files
+                self.results_frame.grid_forget()
+            else:
+                messagebox.showinfo(
+                    "No Files Found",
+                    f"No Excel files found in:\n{folder}\n\n(Files with '_redacted' in the name are excluded)"
+                )
+
     def update_file_display(self):
         """Update the file label with selected files."""
         if not self.input_files:
@@ -717,7 +760,9 @@ class EnhancedRedactionGUI:
         thread.start()
 
     def _perform_redaction(self):
-        """Perform batch redaction on multiple files."""
+        """Perform batch redaction on multiple files with robust error handling."""
+        failed_files = []  # Track files that failed
+        
         try:
             # Get runtime configuration
             runtime_config = self.get_runtime_config()
@@ -738,55 +783,78 @@ class EnhancedRedactionGUI:
             total_files = len(self.input_files)
 
             for i, input_file in enumerate(self.input_files):
-                # Update status for current file
                 file_name = os.path.basename(input_file)
-                self.root.after(0, lambda fn=file_name, idx=i+1, total=total_files:
-                    self.status_label.config(text=f"Processing file {idx}/{total}: {fn}"))
+                
+                try:
+                    # Update status for current file
+                    self.root.after(0, lambda fn=file_name, idx=i+1, total=total_files:
+                        self.status_label.config(text=f"Processing file {idx}/{total}: {fn}"))
 
-                # Update progress
-                progress = (i / total_files) * 100
-                self.root.after(0, lambda p=progress: self.progress.configure(value=p))
+                    # Update progress
+                    progress = (i / total_files) * 100
+                    self.root.after(0, lambda p=progress: self.progress.configure(value=p))
 
-                # Determine output location
-                if self.output_folder:
-                    # Use selected output folder
-                    base_name = os.path.basename(input_file)
-                    name_parts = os.path.splitext(base_name)
-                    output_name = f"{name_parts[0]}{engine.config['output_suffix']}{name_parts[1]}"
-                    output_path = os.path.join(self.output_folder, output_name)
+                    # Determine output location
+                    if self.output_folder:
+                        # Use selected output folder
+                        base_name = os.path.basename(input_file)
+                        name_parts = os.path.splitext(base_name)
+                        output_name = f"{name_parts[0]}{engine.config['output_suffix']}{name_parts[1]}"
+                        output_path = os.path.join(self.output_folder, output_name)
 
-                    # Ensure output folder exists
-                    os.makedirs(self.output_folder, exist_ok=True)
+                        # Ensure output folder exists
+                        os.makedirs(self.output_folder, exist_ok=True)
 
-                    # Perform redaction with custom output path
-                    output_file, report_file = engine.redact_workbook(input_file, output_path)
-                else:
-                    # Use default behavior (same directory as input)
-                    output_file, report_file = engine.redact_workbook(input_file)
+                        # Perform redaction with custom output path
+                        output_file, report_file = engine.redact_workbook(input_file, output_path)
+                    else:
+                        # Use default behavior (same directory as input)
+                        output_file, report_file = engine.redact_workbook(input_file)
 
-                self.output_files.append(output_file)
-                self.report_files.append(report_file)
+                    self.output_files.append(output_file)
+                    self.report_files.append(report_file)
+                    
+                except Exception as file_error:
+                    # Log the error and continue with next file
+                    error_detail = str(file_error)
+                    failed_files.append((file_name, error_detail))
+                    # Clear detection log for this failed file to avoid partial data
+                    engine.detection_log = [d for d in engine.detection_log 
+                                           if d.get('input_file') != input_file]
+                    continue
 
             # Final progress update
             self.root.after(0, lambda: self.progress.configure(value=100))
 
-            # Update UI in main thread
-            self.root.after(0, self._redaction_complete)
+            # Update UI in main thread with results including any failures
+            self.root.after(0, lambda ff=failed_files: self._redaction_complete(ff))
 
         except Exception as e:
             error_msg = f"Redaction failed:\n{str(e)}\n\nDetails:\n{traceback.format_exc()}"
             self.root.after(0, lambda: self._redaction_error(error_msg))
 
-    def _redaction_complete(self):
-        """Handle successful redaction completion."""
+    def _redaction_complete(self, failed_files=None):
+        """Handle redaction completion, including partial failures."""
         self.processing = False
         self.redact_button.config(state=tk.NORMAL)
 
-        # Update status
-        files_count = len(self.output_files)
-        self.status_label.config(
-            text=f"✓ Successfully redacted {files_count} file(s)!"
-        )
+        # Calculate success/failure counts
+        success_count = len(self.output_files)
+        failure_count = len(failed_files) if failed_files else 0
+        
+        # Update status based on results
+        if failure_count == 0:
+            self.status_label.config(
+                text=f"✓ Successfully redacted {success_count} file(s)!"
+            )
+        elif success_count == 0:
+            self.status_label.config(
+                text=f"✗ All {failure_count} file(s) failed to process"
+            )
+        else:
+            self.status_label.config(
+                text=f"✓ Redacted {success_count} file(s), ⚠ {failure_count} failed"
+            )
 
         # Show results section
         self.results_frame.grid(row=8, column=0, columnspan=3, pady=(10, 0), sticky=(tk.W, tk.E))
@@ -818,6 +886,26 @@ class EnhancedRedactionGUI:
                         f"• Files saved in their original directories\n"
                         f"• Each with an accompanying report"
                     )
+            
+            # Add failure info if any files failed
+            if failed_files:
+                info_text += f"\n\n⚠ {len(failed_files)} file(s) failed:"
+                for fname, error in failed_files[:5]:  # Show first 5 failures
+                    # Truncate error message for display
+                    short_error = error[:80] + "..." if len(error) > 80 else error
+                    info_text += f"\n  • {fname}: {short_error}"
+                if len(failed_files) > 5:
+                    info_text += f"\n  ... and {len(failed_files) - 5} more"
+                    
+            self.output_info_label.config(text=info_text)
+        elif failed_files:
+            # No files succeeded, only show failures
+            info_text = f"All files failed to process:\n"
+            for fname, error in failed_files[:5]:
+                short_error = error[:80] + "..." if len(error) > 80 else error
+                info_text += f"\n  • {fname}: {short_error}"
+            if len(failed_files) > 5:
+                info_text += f"\n  ... and {len(failed_files) - 5} more"
             self.output_info_label.config(text=info_text)
 
     def _redaction_error(self, error_msg):
