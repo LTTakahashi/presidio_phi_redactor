@@ -190,7 +190,7 @@ class RedactionEngine:
         Applies all configured recognizers and filters.
         """
         if not text or not str(text).strip():
-            return text
+            return text, []
 
         text_str = str(text)
         

@@ -9,6 +9,16 @@ import sys
 import threading
 import traceback
 import glob
+import logging
+
+# Set up logging early
+log_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+log_file = os.path.join(log_dir, 'redaction.log')
+logging.basicConfig(
+    filename=log_file,
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Check for critical dependencies before proceeding
 try:
@@ -816,6 +826,7 @@ class EnhancedRedactionGUI:
                     
                 except Exception as file_error:
                     # Log the error and continue with next file
+                    logging.error(f"Failed to process {file_name}", exc_info=True)
                     error_detail = str(file_error)
                     failed_files.append((file_name, error_detail))
                     # Clear detection log for this failed file to avoid partial data
